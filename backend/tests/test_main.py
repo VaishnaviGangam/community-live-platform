@@ -74,6 +74,16 @@ def test_login_returns_access_token() -> None:
     assert response.json()["user"]["id"] == account["user"]["id"]
 
 
+
+def test_login_accepts_username() -> None:
+    account, password = create_account()
+    response = client.post(
+        "/api/auth/login",
+        json={"email": account["user"]["username"], "password": password},
+    )
+    assert response.status_code == 200
+    assert response.json()["user"]["id"] == account["user"]["id"]
+
 def test_login_rejects_wrong_password() -> None:
     account, _ = create_account()
     response = client.post(
