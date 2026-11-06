@@ -56,7 +56,14 @@ export default function App() {
         return response.json() as Promise<ChatMessage[]>;
       })
       .then((history) => {
-        if (active && history.length) setMessages(history);
+        if (active && history.length) {
+          setMessages((current) => {
+            const merged = new Map<number, ChatMessage>();
+            current.forEach((item) => { if (item.id !== undefined) merged.set(item.id, item); });
+            history.forEach((item) => { if (item.id !== undefined) merged.set(item.id, item); });
+            return [...merged.values()].sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+          });
+        }
       })
       .catch(() => { if (active) setNotice("Chat history is unavailable. You can still chat."); });
 
