@@ -2,9 +2,11 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, AudioLines, Hash, MessageCircle, Send, Users, Wifi, WifiOff, Zap } from "lucide-react";
 
 type ChatMessage = {
+  id?: number;
   type: "message";
   username: string;
   text: string;
+  created_at?: string;
 };
 
 type ServerError = {
@@ -14,12 +16,11 @@ type ServerError = {
 
 type FeedItem = ChatMessage | ServerError;
 
+const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const WS_URL = import.meta.env.VITE_WS_URL ?? "ws://localhost:8000/ws/chat";
 
 const starterMessages: ChatMessage[] = [
-  { type: "message", username: "System", text: "Welcome to Community Live! Be kind and enjoy the conversation." },
-  { type: "message", username: "Maya", text: "What is everyone building this week?" },
-  { type: "message", username: "Jordan", text: "Working on a new frontend project. Excited to share it soon!" }
+  { type: "message", username: "System", text: "Welcome to Community Live! Be kind and enjoy the conversation." }
 ];
 
 function initials(name: string): string {
@@ -36,6 +37,19 @@ export default function App() {
   const feedRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    let active = true;
+    fetch(`${API_URL}/api/messages?limit=50`)
+      .then((response) => {
+        if (!response.ok) throw new Error("Unable to load chat history.");
+        return response.json() as Promise<ChatMessage[]>;
+      })
+      .then((history) => {
+        if (active && history.length) setMessages(history);
+      })
+      .catch(() => {
+        if (active) setNotice("Chat history is unavailable. You can still try connecting.");
+      });
+
     const socket = new WebSocket(WS_URL);
     socketRef.current = socket;
 
@@ -47,7 +61,10 @@ export default function App() {
       try {
         const payload = JSON.parse(event.data) as FeedItem;
         if (payload.type === "message") {
-          setMessages((current) => [...current, payload]);
+          setMessages((current) => {
+            if (payload.id && current.some((item) => item.id === payload.id)) return current;
+            return [...current, payload];
+          });
         } else {
           setNotice(payload.message);
         }
@@ -62,6 +79,7 @@ export default function App() {
     };
 
     return () => {
+      active = false;
       socket.close();
       socketRef.current = null;
     };
@@ -146,12 +164,12 @@ export default function App() {
             <div className="chat-presence"><span className={connected ? "presence-dot" : "presence-dot offline"} /> {participantCount} online</div>
           </div>
           <div className="message-feed" ref={feedRef} aria-live="polite">
-            <div className="day-divider"><span /> TODAY <span /></div>
+            <div className="day-divider"><span /> CHAT HISTORY <span /></div>
             {messages.map((message, index) => (
-              <article className="message" key={index}>
+              <article className="message" key={message.id ?? index}>
                 <div className={message.username === "System" ? "avatar system-avatar" : "avatar"}>{initials(message.username)}</div>
                 <div className="message-content">
-                  <div className="message-meta"><strong>{message.username}</strong><time>{message.username === "System" ? "WELCOME" : "JUST NOW"}</time></div>
+                  <div className="message-meta"><strong>{message.username}</strong><time>{message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "WELCOME"}</time></div>
                   <p>{message.text}</p>
                 </div>
               </article>
@@ -177,7 +195,7 @@ export default function App() {
           <div className="about-footer"><span className="footer-pulse" /> Powered by WebSockets</div>
         </aside>
       </section>
-      <footer className="footer"><span>COMMUNITY LIVE</span><span>Built for connection, designed for conversation.</span><span>V 0.1.0</span></footer>
+      <footer className="footer"><span>COMMUNITY LIVE</span><span>Built for connection, designed for conversation.</span><span>V 0.2.0</span></footer>
     </main>
   );
 }
