@@ -163,7 +163,7 @@ export default function App() {
           </div>
           <form className="auth-form" onSubmit={submitAuth}>
             {authMode === "register" && <label>Username<input value={authName} onChange={(event) => setAuthName(event.target.value)} minLength={3} maxLength={24} pattern="[A-Za-z0-9_]+" placeholder="e.g. vaishnavi" autoComplete="username" required /></label>}
-            <label>Email address<input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="you@example.com" autoComplete="email" required /></label>
+            <label>{authMode === "register" ? "Email address" : "Email or username"}<input type={authMode === "register" ? "email" : "text"} value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder={authMode === "register" ? "you@example.com" : "Email address or username"} autoComplete={authMode === "register" ? "email" : "username"} required /></label>
             <label>Password<input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} minLength={authMode === "register" ? 10 : 1} maxLength={128} placeholder={authMode === "register" ? "At least 10 characters" : "Your password"} autoComplete={authMode === "register" ? "new-password" : "current-password"} required /></label>
             {authMode === "register" && <small className="password-hint">Use at least 10 characters. Your password is securely hashed before storage.</small>}
             {authError && <div className="auth-error" role="alert">{authError}</div>}
