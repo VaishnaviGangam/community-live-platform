@@ -1,22 +1,27 @@
-"""Community Live API: REST health endpoint and in-memory WebSocket chat."""
+"""Community Live API: REST endpoints and persistent WebSocket chat."""
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError
+from sqlalchemy import select
+
+from app.database import Base, SessionLocal, engine
+from app.models import Message
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Community Live API",
-    description="A small real-time chat service for the Community Live portfolio project.",
-    version="0.1.0",
+    description="A real-time community chat service with persistent message history.",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -26,6 +31,12 @@ app.add_middleware(
     allow_methods=["GET"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def create_database_tables() -> None:
+    """Create tables for the starter app; production migrations are a future step."""
+    Base.metadata.create_all(bind=engine)
 
 
 class ChatMessage(BaseModel):
@@ -76,14 +87,34 @@ manager = ConnectionManager()
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
+def health() -> dict[str, str]:
     """Simple health check for local development and containers."""
     return {"status": "ok", "service": "community-live-api"}
 
 
+@app.get("/api/messages")
+def get_messages(limit: int = Query(default=50, ge=1, le=100)) -> list[dict[str, Any]]:
+    """Return the most recent messages in chronological order."""
+    with SessionLocal() as session:
+        rows = session.scalars(
+            select(Message).order_by(Message.created_at.desc(), Message.id.desc()).limit(limit)
+        ).all()
+        rows.reverse()
+        return [
+            {
+                "id": row.id,
+                "type": "message",
+                "username": row.username,
+                "text": row.text,
+                "created_at": row.created_at.isoformat(),
+            }
+            for row in rows
+        ]
+
+
 @app.websocket("/ws/chat")
 async def chat_socket(websocket: WebSocket) -> None:
-    """Accept validated chat messages and broadcast them to connected clients."""
+    """Validate, persist, and broadcast chat messages."""
     await manager.connect(websocket)
     try:
         while True:
@@ -97,16 +128,26 @@ async def chat_socket(websocket: WebSocket) -> None:
                 logger.debug("Rejected invalid chat payload: %s", exc)
                 continue
 
-            payload = {
-                "type": "message",
-                "username": message.username.strip(),
-                "text": message.text.strip(),
-            }
-            if not payload["username"] or not payload["text"]:
+            username = message.username.strip()
+            text = message.text.strip()
+            if not username or not text:
                 await websocket.send_json(
                     {"type": "error", "message": "Name and message cannot be blank."}
                 )
                 continue
+
+            with SessionLocal() as session:
+                row = Message(username=username, text=text, created_at=datetime.now(timezone.utc))
+                session.add(row)
+                session.commit()
+                session.refresh(row)
+                payload = {
+                    "id": row.id,
+                    "type": "message",
+                    "username": row.username,
+                    "text": row.text,
+                    "created_at": row.created_at.isoformat(),
+                }
 
             await manager.broadcast(payload)
     except WebSocketDisconnect:
