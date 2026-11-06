@@ -1,9 +1,30 @@
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: community_live
+      POSTGRES_USER: community
+      POSTGRES_PASSWORD: community_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U community -d community_live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   api:
     build:
       context: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://community:community_dev_password@db:5432/community_live
     ports:
       - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -21,6 +42,10 @@ services:
       - "5173:5173"
     environment:
       - VITE_WS_URL=ws://localhost:8000/ws/chat
+      - VITE_API_URL=http://localhost:8000
     depends_on:
       api:
         condition: service_healthy
+
+volumes:
+  postgres_data:
