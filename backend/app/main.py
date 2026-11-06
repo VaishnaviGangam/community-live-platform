@@ -177,10 +177,16 @@ def register(payload: RegisterRequest) -> dict[str, Any]:
 @app.post("/api/auth/login")
 def login(payload: LoginRequest) -> dict[str, Any]:
     email = payload.email.strip().lower()
+    # Accept either the registered email address or username. This also helps
+    # when a user originally registered with a different email spelling.
     with SessionLocal() as session:
-        user = session.scalar(select(User).where(User.email == email))
+        user = session.scalar(
+            select(User).where(
+                or_(User.email == email, User.username.ilike(payload.email.strip()))
+            )
+        )
         if user is None or not password_hasher.verify(payload.password, user.password_hash):
-            raise HTTPException(status_code=401, detail="Incorrect email or password.")
+            raise HTTPException(status_code=401, detail="Incorrect email/username or password.")
         return {"access_token": create_access_token(user), "token_type": "bearer", "user": public_user(user)}
 
 
