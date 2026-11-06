@@ -20,6 +20,8 @@ services:
       context: ./backend
     environment:
       DATABASE_URL: postgresql+psycopg://community:community_dev_password@db:5432/community_live
+      JWT_SECRET_KEY: local-development-only-change-this-secret-before-deployment
+      ACCESS_TOKEN_MINUTES: 60
     ports:
       - "8000:8000"
     depends_on:
